@@ -80,7 +80,7 @@ export async function compressPdfDocument(
   }
 
   const compressedBytes = await newDoc.save();
-  const compressedBlob = new Blob([compressedBytes], { type: 'application/pdf' });
+  const compressedBlob = new Blob([compressedBytes as unknown as BlobPart], { type: 'application/pdf' });
   const compressedSize = compressedBlob.size;
 
   const { savingsPercent, isLargerThanOriginal } = calculateCompressionMetrics(
