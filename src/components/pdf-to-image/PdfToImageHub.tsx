@@ -15,6 +15,7 @@ export function PdfToImageHub() {
     setOptions,
     needsPassword,
     password,
+    passwordError,
     setPassword,
     handlePasswordSubmit,
     isLoadingDoc,
@@ -47,6 +48,11 @@ export function PdfToImageHub() {
           </div>
           <h3 className="text-base font-bold text-slate-900">PDF Terproteksi Kata Sandi</h3>
           <p className="text-xs text-slate-500">Masukkan kata sandi untuk mendekripsi dan membaca dokumen di browser.</p>
+          {passwordError && (
+            <div className="p-2.5 bg-red-50 border border-red-200 text-red-700 text-xs rounded-xl font-medium">
+              {passwordError}
+            </div>
+          )}
           <input
             type="password"
             placeholder="Masukkan kata sandi..."

@@ -5,6 +5,7 @@ import type { PdfPageItem, PdfToImageOptions } from '@/lib/types';
 import {
   getPdfJs,
   renderPdfPageToBlob,
+  extractPagesFromPdf,
   packagePagesToZip,
   formatZipPageFilename,
   getExtensionFromMime,
@@ -23,6 +24,7 @@ export function usePdfToImage() {
   });
   const [needsPassword, setNeedsPassword] = useState(false);
   const [password, setPassword] = useState('');
+  const [passwordError, setPasswordError] = useState<string | null>(null);
   const [isLoadingDoc, setIsLoadingDoc] = useState(false);
   const [isExtracting, setIsExtracting] = useState(false);
   const [progress, setProgress] = useState({ current: 0, total: 0 });
@@ -46,7 +48,9 @@ export function usePdfToImage() {
     cleanupUrls();
     setPdfFile(file);
     setIsLoadingDoc(true);
-    setNeedsPassword(false);
+    setPasswordError(null);
+
+    let pdfDoc: any = null;
 
     try {
       const buffer = await file.arrayBuffer();
@@ -56,7 +60,8 @@ export function usePdfToImage() {
         password: suppliedPassword,
       });
 
-      const pdfDoc = await loadingTask.promise;
+      pdfDoc = await loadingTask.promise;
+      setNeedsPassword(false);
       const total = pdfDoc.numPages;
 
       const pageItems: PdfPageItem[] = [];
@@ -81,11 +86,19 @@ export function usePdfToImage() {
       const errorObj = err as { name?: string; message?: string };
       if (errorObj?.name === 'PasswordException') {
         setNeedsPassword(true);
+        if (suppliedPassword) {
+          setPasswordError('Kata sandi salah. Silakan coba lagi.');
+        }
       } else {
         console.error('Failed to load PDF:', err);
         alert('Gagal membaca dokumen PDF. Pastikan file valid.');
       }
     } finally {
+      if (pdfDoc) {
+        try {
+          await pdfDoc.destroy();
+        } catch {}
+      }
       setIsLoadingDoc(false);
     }
   };
@@ -113,16 +126,25 @@ export function usePdfToImage() {
     try {
       const buffer = await pdfFile.arrayBuffer();
       const pdfjsLib = await getPdfJs();
-      const pdfDoc = await pdfjsLib.getDocument({ data: buffer, password }).promise;
+      const pdfDoc = await pdfjsLib.getDocument({
+        data: buffer,
+        password: password || undefined,
+      }).promise;
 
-      const blob = await renderPdfPageToBlob(pdfDoc, pageNumber, {
-        format: options.format,
-        dpiScale: options.dpiScale,
-      });
+      try {
+        const blob = await renderPdfPageToBlob(pdfDoc, pageNumber, {
+          format: options.format,
+          dpiScale: options.dpiScale,
+        });
 
-      const ext = getExtensionFromMime(options.format);
-      const filename = formatZipPageFilename(pageNumber, pages.length, ext);
-      saveAs(blob, filename);
+        const ext = getExtensionFromMime(options.format);
+        const filename = formatZipPageFilename(pageNumber, pages.length, ext);
+        saveAs(blob, filename);
+      } finally {
+        try {
+          await pdfDoc.destroy();
+        } catch {}
+      }
     } catch (err) {
       console.error('Download page failed:', err);
       alert('Gagal mendownload halaman.');
@@ -150,22 +172,16 @@ export function usePdfToImage() {
 
     try {
       const buffer = await pdfFile.arrayBuffer();
-      const pdfjsLib = await getPdfJs();
-      const pdfDoc = await pdfjsLib.getDocument({ data: buffer, password }).promise;
-
-      const extractedBlobs: { pageNumber: number; blob: Blob }[] = [];
-
-      for (let i = 0; i < targetPages.length; i++) {
-        const pageNum = targetPages[i];
-        setProgress({ current: i + 1, total: targetPages.length });
-
-        const blob = await renderPdfPageToBlob(pdfDoc, pageNum, {
-          format: options.format,
-          dpiScale: options.dpiScale,
-        });
-        extractedBlobs.push({ pageNumber: pageNum, blob });
-        await new Promise((r) => setTimeout(r, 0));
-      }
+      const extractedBlobs = await extractPagesFromPdf(
+        buffer,
+        {
+          ...options,
+          pageSelection: 'custom',
+          customPages: targetPages,
+          password: password || undefined,
+        },
+        (current, total) => setProgress({ current, total })
+      );
 
       const zipBlob = await packagePagesToZip(
         extractedBlobs,
@@ -187,6 +203,7 @@ export function usePdfToImage() {
     setPages([]);
     setNeedsPassword(false);
     setPassword('');
+    setPasswordError(null);
   };
 
   return {
@@ -196,6 +213,7 @@ export function usePdfToImage() {
     setOptions,
     needsPassword,
     password,
+    passwordError,
     setPassword,
     handlePasswordSubmit,
     isLoadingDoc,

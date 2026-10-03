@@ -5,6 +5,7 @@ import type { ImageFileItem, ImageToPdfOptions } from '@/lib/types';
 import { generatePdfFromImages } from '@/lib/converters/image-to-pdf';
 import { decodeHeicToBlob } from '@/lib/converters/heic-decoder';
 import { decodeTiffToBlob } from '@/lib/converters/tiff-decoder';
+import { loadImageFromBlob } from '@/lib/utils/canvas-helpers';
 import { getFileExtension } from '@/lib/utils/file-helpers';
 import { saveAs } from 'file-saver';
 
@@ -34,7 +35,7 @@ export function useImageToPdf() {
     return () => cleanupUrls();
   }, [cleanupUrls]);
 
-  const addFiles = async (files: File[]) => {
+  const addFiles = useCallback(async (files: File[]) => {
     const newItems: ImageFileItem[] = [];
 
     for (const file of files) {
@@ -56,8 +57,9 @@ export function useImageToPdf() {
             type: 'image/png',
           });
         }
+        await loadImageFromBlob(previewBlob);
       } catch (err) {
-        console.error('Extended decode failed for file:', file.name, err);
+        console.error('Image validation/decode failed for file:', file.name, err);
         itemStatus = 'error';
         itemError = 'Format rusak atau tidak didukung';
       }
@@ -79,12 +81,15 @@ export function useImageToPdf() {
     }
 
     setImages((prev) => [...prev, ...newItems]);
-  };
+  }, [registerUrl]);
 
   const removeImage = (id: string) => {
     setImages((prev) => {
       const item = prev.find((img) => img.id === id);
-      if (item && item.previewUrl) URL.revokeObjectURL(item.previewUrl);
+      if (item && item.previewUrl) {
+        URL.revokeObjectURL(item.previewUrl);
+        objectUrlsRef.current.delete(item.previewUrl);
+      }
       return prev.filter((img) => img.id !== id);
     });
   };

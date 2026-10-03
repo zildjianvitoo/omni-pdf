@@ -53,30 +53,38 @@ export async function compressPdfDocument(
 
   const newDoc = await PDFDocument.create();
 
-  for (let pageNum = 1; pageNum <= totalPages; pageNum++) {
-    onProgress?.(pageNum, totalPages);
+  try {
+    for (let pageNum = 1; pageNum <= totalPages; pageNum++) {
+      onProgress?.(pageNum, totalPages);
 
-    const jpegBlob = await renderPdfPageToBlob(sourcePdf, pageNum, {
-      format: 'image/jpeg',
-      dpiScale: options.dpiScale,
-      quality: options.jpegQuality,
-    });
+      const jpegBlob = await renderPdfPageToBlob(sourcePdf, pageNum, {
+        format: 'image/jpeg',
+        dpiScale: options.dpiScale,
+        quality: options.jpegQuality,
+      });
 
-    const imageBytes = new Uint8Array(await jpegBlob.arrayBuffer());
-    const embeddedJpg = await newDoc.embedJpg(imageBytes);
+      const imageBytes = new Uint8Array(await jpegBlob.arrayBuffer());
+      const embeddedJpg = await newDoc.embedJpg(imageBytes);
 
-    // Keep page dimensions proportional to original unscaled page size
-    const page = await sourcePdf.getPage(pageNum);
-    const originalViewport = page.getViewport({ scale: 1.0 });
-    const newPage = newDoc.addPage([originalViewport.width, originalViewport.height]);
-    newPage.drawImage(embeddedJpg, {
-      x: 0,
-      y: 0,
-      width: originalViewport.width,
-      height: originalViewport.height,
-    });
+      // Keep page dimensions proportional to original unscaled page size
+      const page = await sourcePdf.getPage(pageNum);
+      const originalViewport = page.getViewport({ scale: 1.0 });
+      const newPage = newDoc.addPage([originalViewport.width, originalViewport.height]);
+      newPage.drawImage(embeddedJpg, {
+        x: 0,
+        y: 0,
+        width: originalViewport.width,
+        height: originalViewport.height,
+      });
 
-    await new Promise((r) => setTimeout(r, 0)); // Yield to thread
+      await new Promise((r) => setTimeout(r, 0)); // Yield to thread
+    }
+  } finally {
+    try {
+      await sourcePdf.destroy();
+    } catch {
+      // Ignore worker cleanup error
+    }
   }
 
   const compressedBytes = await newDoc.save();

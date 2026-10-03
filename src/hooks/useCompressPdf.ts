@@ -12,6 +12,7 @@ export function useCompressPdf() {
   const [pdfFile, setPdfFile] = useState<File | null>(null);
   const [preset, setPreset] = useState<CompressionPreset>('recommended');
   const [password, setPassword] = useState('');
+  const [passwordError, setPasswordError] = useState<string | null>(null);
   const [needsPassword, setNeedsPassword] = useState(false);
   const [isCompressing, setIsCompressing] = useState(false);
   const [progress, setProgress] = useState({ current: 0, total: 0 });
@@ -33,22 +34,30 @@ export function useCompressPdf() {
     setResult(null);
     setNeedsPassword(false);
     setPassword('');
+    setPasswordError(null);
   };
 
   const startCompression = async (suppliedPassword?: string) => {
     if (!pdfFile) return;
+
+    if (result?.downloadUrl) {
+      URL.revokeObjectURL(result.downloadUrl);
+      objectUrlsRef.current.delete(result.downloadUrl);
+    }
+
     setIsCompressing(true);
     setProgress({ current: 0, total: 0 });
-    setNeedsPassword(false);
+    setPasswordError(null);
 
     try {
       const buffer = await pdfFile.arrayBuffer();
       const presetValues = getCompressionPresetValues(preset);
+      const effectivePassword = suppliedPassword || password || undefined;
       const options: CompressPdfOptions = {
         preset,
         dpiScale: presetValues.dpiScale,
         jpegQuality: presetValues.jpegQuality,
-        password: suppliedPassword || password || undefined,
+        password: effectivePassword,
       };
 
       const compressResult = await compressPdfDocument(
@@ -57,12 +66,16 @@ export function useCompressPdf() {
         (current, total) => setProgress({ current, total })
       );
 
+      setNeedsPassword(false);
       objectUrlsRef.current.add(compressResult.downloadUrl);
       setResult(compressResult);
     } catch (err: unknown) {
       const errorObj = err as { name?: string };
       if (errorObj?.name === 'PasswordException') {
         setNeedsPassword(true);
+        if (suppliedPassword || password) {
+          setPasswordError('Kata sandi salah. Silakan coba lagi.');
+        }
       } else {
         console.error('Compression failed:', err);
         alert('Gagal mengompresi file PDF. Pastikan file valid.');
@@ -88,6 +101,7 @@ export function useCompressPdf() {
     setResult(null);
     setNeedsPassword(false);
     setPassword('');
+    setPasswordError(null);
   };
 
   return {
@@ -95,6 +109,7 @@ export function useCompressPdf() {
     preset,
     setPreset,
     password,
+    passwordError,
     setPassword,
     needsPassword,
     isCompressing,

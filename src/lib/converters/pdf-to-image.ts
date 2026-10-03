@@ -116,19 +116,27 @@ export async function extractPagesFromPdf(
 
   const results: { pageNumber: number; blob: Blob }[] = [];
 
-  for (let i = 0; i < targetPages.length; i++) {
-    const pageNum = targetPages[i];
-    onProgress?.(i + 1, targetPages.length);
+  try {
+    for (let i = 0; i < targetPages.length; i++) {
+      const pageNum = targetPages[i];
+      onProgress?.(i + 1, targetPages.length);
 
-    const blob = await renderPdfPageToBlob(pdfDoc, pageNum, {
-      format: options.format,
-      dpiScale: options.dpiScale,
-    });
+      const blob = await renderPdfPageToBlob(pdfDoc, pageNum, {
+        format: options.format,
+        dpiScale: options.dpiScale,
+      });
 
-    results.push({ pageNumber: pageNum, blob });
+      results.push({ pageNumber: pageNum, blob });
 
-    // Yield to main thread briefly for UI responsiveness
-    await new Promise((r) => setTimeout(r, 0));
+      // Yield to main thread briefly for UI responsiveness
+      await new Promise((r) => setTimeout(r, 0));
+    }
+  } finally {
+    try {
+      await pdfDoc.destroy();
+    } catch {
+      // Ignore worker cleanup error
+    }
   }
 
   return results;
